@@ -30,19 +30,7 @@ static volatile int s_display_page = 0;
 // ---------------------------------------------------------------------------
 static void imu_task(void *pvParameters)
 {
-    i2c_master_bus_handle_t bus = bsp_get_i2c_bus();
-
-    if (mpu6050_init(bus) != ESP_OK) {
-        ESP_LOGE(TAG, "MPU6050 init failed — IMU task halted");
-        vTaskDelete(NULL);
-        return;
-    }
-    if (hmc5883l_init(bus) != ESP_OK) {
-        ESP_LOGE(TAG, "HMC5883L init failed — IMU task halted");
-        vTaskDelete(NULL);
-        return;
-    }
-
+    // Sensors are initialised in app_main before tasks start
     while (1) {
         float pitch = 0.0f, roll = 0.0f, heading = 0.0f;
         mpu6050_read(&pitch, &roll);
@@ -90,9 +78,7 @@ static void gps_copy_task(void *pvParameters)
 // ---------------------------------------------------------------------------
 static void display_task(void *pvParameters)
 {
-    i2c_master_bus_handle_t bus = bsp_get_i2c_bus();
-    lcd_init(bus, LCD_I2C_ADDR);
-
+    // LCD initialised in app_main — just show splash
     // Boot splash
     lcd_clear();
     lcd_set_cursor(0, 0);
@@ -101,12 +87,13 @@ static void display_task(void *pvParameters)
     lcd_write_string(" RENDEZVOUS SYS");
     vTaskDelay(pdMS_TO_TICKS(2000));
 
-    char row0[17], row1[17];
-    int  prev_button = 1;
+    char     row0[17], row1[17];
+    int      prev_button   = 1;
+    uint32_t local_btn_ms  = 0;   // latch timestamp for local button press
 
     while (1) {
-        // Button edge detection (active low)
-        int btn = gpio_get_level(HAL_BUTTON_PIN);
+        // Page scroll button edge detection (HAL_BUTTON_PAGE_PIN, active low)
+        int btn = gpio_get_level(HAL_BUTTON_PAGE_PIN);
         if (btn == 0 && prev_button == 1) {
             s_display_page = (s_display_page + 1) % NUM_DISPLAY_PAGES;
         }
@@ -121,7 +108,18 @@ static void display_task(void *pvParameters)
         }
 
         uint32_t now_ms  = (uint32_t)(esp_timer_get_time() / 1000ULL);
-        bool     link_ok = (remote.seq > 0) && ((now_ms - remote.timestamp_ms) < 1000);
+        uint32_t rx_age  = now_ms - g_remote_rx_ms;
+        bool     link_ok = (remote.seq > 0) && (rx_age < 1000);
+
+        // Latch local button press — update timestamp while held, show for 600 ms after release
+        if (!gpio_get_level(HAL_BUTTON_PIN)) {
+            local_btn_ms = now_ms;
+        }
+        bool local_btn  = (local_btn_ms > 0 && (now_ms - local_btn_ms) < 600);
+
+        // Latch remote button indicator for 600 ms so a quick tap is always visible
+        bool remote_btn = remote.button_state ||
+                          (g_remote_btn_ms > 0 && (now_ms - g_remote_btn_ms) < 600);
 
         double lat_l, lon_l, lat_r, lon_r;
         bool   gps_l_valid, gps_r_valid;
@@ -132,14 +130,22 @@ static void display_task(void *pvParameters)
 
         switch (s_display_page) {
 
-        case 0: // IMU view
-            snprintf(row0, sizeof(row0), "L H:%03d P:%+3.0f  ", (int)local.heading, local.pitch);
-            if (link_ok) {
-                snprintf(row1, sizeof(row1), "R H:%03d P:%+3.0f  ", (int)remote.heading, remote.pitch);
+        case 0: { // Button alerts + signal health
+            const char *l_btn = local_btn ? "***PRESS***" : "           ";
+            snprintf(row0, sizeof(row0), "L %s", l_btn);
+
+            // Row 1: remote button press latched 600ms; otherwise show link quality
+            if (remote_btn) {
+                snprintf(row1, sizeof(row1), "R ***PRESS***   ");
+            } else if (!link_ok) {
+                snprintf(row1, sizeof(row1), "R  NO LINK      ");
             } else {
-                snprintf(row1, sizeof(row1), "R ---NO LINK--- ");
+                const char *quality = rx_age < 250 ? "GOOD" :
+                                      rx_age < 600 ? "FAIR" : "POOR";
+                snprintf(row1, sizeof(row1), "R %s %4lums  ", quality, (unsigned long)rx_age);
             }
             break;
+        }
 
         case 1: // Local GPS
             if (gps_l_valid) {
@@ -167,8 +173,10 @@ static void display_task(void *pvParameters)
         case 3: // Link status
             snprintf(row0, sizeof(row0), "SEQ: %05lu      ", (unsigned long)remote.seq);
             if (link_ok) {
-                uint32_t age = now_ms - remote.timestamp_ms;
-                snprintf(row1, sizeof(row1), "AGE: %4lums     ", (unsigned long)age);
+                uint32_t age = rx_age;
+                const char *quality = age < 250  ? "GOOD" :
+                                      age < 600  ? "FAIR" : "POOR";
+                snprintf(row1, sizeof(row1), "%s  %4lums   ", quality, (unsigned long)age);
             } else {
                 snprintf(row1, sizeof(row1), "NO LINK         ");
             }
@@ -197,7 +205,7 @@ static void display_task(void *pvParameters)
         lcd_set_cursor(1, 0);
         lcd_write_string(row1);
 
-        vTaskDelay(pdMS_TO_TICKS(250));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 

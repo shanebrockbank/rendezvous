@@ -37,3 +37,10 @@ void espnow_tx_task(void *pvParameters);
 extern telemetry_packet_t g_local;
 extern telemetry_packet_t g_remote;
 extern SemaphoreHandle_t  g_telem_mutex;
+
+// Local uptime (ms) when the last packet was received from the remote node.
+// Use THIS for link staleness checks — not remote.timestamp_ms (different clock).
+extern volatile uint32_t g_remote_rx_ms;
+
+// Local uptime (ms) of the last remote button press — latched so display can't miss a quick tap.
+extern volatile uint32_t g_remote_btn_ms;

@@ -14,6 +14,11 @@ static const char *TAG = "espnow";
 
 #define ESPNOW_CHANNEL   1
 
+// Local uptime (ms) at last successful packet receive — defined here, extern'd in header
+volatile uint32_t g_remote_rx_ms = 0;
+// Local uptime (ms) of last remote button press — latches so display can't miss a quick press
+volatile uint32_t g_remote_btn_ms = 0;
+
 // Broadcast MAC — all ESP-NOW peers receive
 static const uint8_t k_broadcast_mac[ESP_NOW_ETH_ALEN] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
@@ -45,11 +50,21 @@ static void recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, i
         xSemaphoreGive(g_telem_mutex);
     }
 
+    // Record OUR local time of receipt — used for link staleness (not remote clock)
+    g_remote_rx_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+
     // Drive RX LED directly — high if remote button pressed, brief pulse otherwise
     gpio_set_level(HAL_LED_RX_PIN, pkt->button_state ? 1 : 0);
 
-    ESP_LOGI(TAG, "RX node=%d seq=%lu btn=%d",
-             pkt->node_id, (unsigned long)pkt->seq, pkt->button_state);
+    // Latch button-press timestamp so display task can't miss a quick press
+    if (pkt->button_state) {
+        g_remote_btn_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    }
+
+    if (pkt->button_state || pkt->seq % 25 == 0) {
+        ESP_LOGI(TAG, "RX node=%d seq=%lu btn=%d",
+                 pkt->node_id, (unsigned long)pkt->seq, pkt->button_state);
+    }
 }
 
 void espnow_comms_init(void)
@@ -83,27 +98,46 @@ void espnow_comms_init(void)
 
 void espnow_tx_task(void *pvParameters)
 {
+    uint8_t  prev_btn     = 0;
+    uint32_t last_send_ms = 0;
+    uint32_t led_off_ms   = 0;
+
     while (1) {
-        if (xSemaphoreTake(g_telem_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            g_local.node_id      = NODE_ID;
-            g_local.timestamp_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
-            g_local.button_state = (uint8_t)(!gpio_get_level(HAL_BUTTON_PIN)); // active low
-            g_local.seq++;
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+        uint8_t  btn    = (uint8_t)(!gpio_get_level(HAL_BUTTON_PIN)); // active low
 
-            esp_now_send(k_broadcast_mac, (uint8_t *)&g_local, sizeof(telemetry_packet_t));
-
-            // Turn TX LED off after brief on from send_cb
-            vTaskDelay(pdMS_TO_TICKS(50));
+        // Turn TX LED off 50 ms after last send
+        if (led_off_ms && now_ms >= led_off_ms) {
             gpio_set_level(HAL_LED_TX_PIN, 0);
-
-            if (g_local.seq % 25 == 0) {
-                ESP_LOGI(TAG, "TX seq=%lu btn=%d", (unsigned long)g_local.seq, g_local.button_state);
-            } else if (g_local.button_state) {
-                ESP_LOGI(TAG, "TX seq=%lu BTN PRESSED", (unsigned long)g_local.seq);
-            }
-
-            xSemaphoreGive(g_telem_mutex);
+            led_off_ms = 0;
         }
-        vTaskDelay(pdMS_TO_TICKS(150)); // 50ms LED on + 150ms = 200ms total cycle
+
+        // Send immediately on button edge (press or release), or every 200 ms heartbeat
+        bool btn_edge   = (btn != prev_btn);
+        bool time_to_tx = (now_ms - last_send_ms) >= 200;
+
+        if (btn_edge || time_to_tx) {
+            uint32_t seq = 0;
+            if (xSemaphoreTake(g_telem_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                g_local.node_id      = NODE_ID;
+                g_local.timestamp_ms = now_ms;
+                g_local.button_state = btn;
+                g_local.seq++;
+                seq = g_local.seq;
+                esp_now_send(k_broadcast_mac, (uint8_t *)&g_local, sizeof(telemetry_packet_t));
+                xSemaphoreGive(g_telem_mutex);
+            }
+            last_send_ms = now_ms;
+            led_off_ms   = now_ms + 50;
+
+            if (btn_edge) {
+                ESP_LOGI(TAG, "TX seq=%lu btn=%s", (unsigned long)seq, btn ? "PRESS" : "release");
+            } else if (seq % 25 == 0) {
+                ESP_LOGI(TAG, "TX seq=%lu btn=%d", (unsigned long)seq, btn);
+            }
+        }
+
+        prev_btn = btn;
+        vTaskDelay(pdMS_TO_TICKS(20)); // 20 ms poll — detects press within one cycle
     }
 }

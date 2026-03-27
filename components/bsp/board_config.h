@@ -8,7 +8,7 @@
 // I2C Device Addresses
 #define MPU6050_I2C_ADDR      0x68
 #define HMC5883L_I2C_ADDR     0x1E
-#define LCD_I2C_ADDR          0x27
+#define LCD_I2C_ADDR          0x3C
 
 // GPS UART
 #define GPS_UART_NUM          UART_NUM_2
@@ -19,7 +19,8 @@
 // GPIO
 #define HAL_LED_TX_PIN        2      // onboard LED — blinks on ESP-NOW send
 #define HAL_LED_RX_PIN        4      // external LED — blinks on ESP-NOW receive
-#define HAL_BUTTON_PIN        0      // BOOT button (active low, already on board)
+#define HAL_BUTTON_PIN        0      // BOOT button — ESP-NOW button_state telemetry (active low)
+#define HAL_BUTTON_PAGE_PIN   13     // External button — cycles LCD display pages (active low)
 
 // Node identity — change per flash (0 = chaser, 1 = target)
 #define NODE_ID               1
@@ -30,4 +31,4 @@
 // 3 = + IMU (MPU6050 + HMC5883L)
 // 4 = + GPS NMEA
 // 5 = + rendezvous docking logic (all tasks)
-#define ACTIVE_MILESTONE      1
+#define ACTIVE_MILESTONE      2

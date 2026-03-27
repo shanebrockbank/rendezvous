@@ -6,6 +6,9 @@
 #include "board_config.h"
 #include "espnow_comms.h"
 #include "gps_nmea.h"
+#include "lcd_i2c.h"
+#include "mpu6050.h"
+#include "hmc5883l.h"
 #include "tasks.h"
 
 static const char *TAG = "main";
@@ -19,7 +22,18 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "Spaceium Rendezvous booting (node_id=%d)", NODE_ID);
 
+    // Hardware bringup — must be first
     bsp_init();
+
+    // Register all I2C devices immediately after bus creation,
+    // before any tasks start (avoids ESP-IDF v5 GPIO conflict warnings)
+#if ACTIVE_MILESTONE >= 2
+    lcd_init(bsp_get_i2c_bus(), LCD_I2C_ADDR);
+#endif
+#if ACTIVE_MILESTONE >= 3
+    mpu6050_init(bsp_get_i2c_bus());
+    hmc5883l_init(bsp_get_i2c_bus());
+#endif
 
     g_telem_mutex = xSemaphoreCreateMutex();
     configASSERT(g_telem_mutex);

@@ -33,6 +33,11 @@ void bsp_init(void)
     ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &s_i2c_bus));
     ESP_LOGI(TAG, "I2C bus initialised (SDA=%d SCL=%d)", HAL_I2C_SDA_PIN, HAL_I2C_SCL_PIN);
 
+    // i2c.common fires "GPIO not usable" on every transaction (ESP-IDF v5 ownership check) — suppress
+    // i2c.master kept at WARN so real errors (timeout, NACK) remain visible
+    esp_log_level_set("i2c.common", ESP_LOG_NONE);
+    esp_log_level_set("i2c.master", ESP_LOG_WARN);
+
     // GPS UART
     uart_config_t uart_cfg = {
         .baud_rate  = GPS_UART_BAUD_RATE,
@@ -61,7 +66,7 @@ void bsp_init(void)
     ESP_ERROR_CHECK(gpio_config(&io_out));
 
     gpio_config_t io_btn = {
-        .pin_bit_mask = (1ULL << HAL_BUTTON_PIN),
+        .pin_bit_mask = (1ULL << HAL_BUTTON_PIN) | (1ULL << HAL_BUTTON_PAGE_PIN),
         .mode         = GPIO_MODE_INPUT,
         .pull_up_en   = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,

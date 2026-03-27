@@ -28,7 +28,3 @@ void lcd_set_cursor(uint8_t row, uint8_t col);
  */
 void lcd_write_string(const char *str);
 
-/**
- * lcd_write_char - write a single character at the current cursor.
- */
-void lcd_write_char(char c);
