@@ -1,14 +1,15 @@
 #pragma once
 
-#include "driver/i2c_master.h"
+#include "driver/i2c.h"
+#include "esp_err.h"
 
 /**
  * hmc5883l_init - configure HMC5883L for continuous measurement.
  *
- * @param bus_handle  Shared I2C master bus handle from hal_get_i2c_bus()
+ * @param port  I2C port number (e.g. I2C_NUM_1)
  * @return ESP_OK on success
  */
-esp_err_t hmc5883l_init(i2c_master_bus_handle_t bus_handle);
+esp_err_t hmc5883l_init(i2c_port_t port);
 
 /**
  * hmc5883l_read - read magnetometer and compute compass heading.

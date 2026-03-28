@@ -25,14 +25,12 @@ void app_main(void)
     // Hardware bringup — must be first
     bsp_init();
 
-    // Register all I2C devices immediately after bus creation,
-    // before any tasks start (avoids ESP-IDF v5 GPIO conflict warnings)
-#if ACTIVE_MILESTONE >= 2
-    lcd_init(bsp_get_i2c_bus(), LCD_I2C_ADDR);
-#endif
 #if ACTIVE_MILESTONE >= 3
-    mpu6050_init(bsp_get_i2c_bus());
-    hmc5883l_init(bsp_get_i2c_bus());
+    mpu6050_init(bsp_get_i2c_port2());
+    hmc5883l_init(bsp_get_i2c_port2());
+#endif
+#if ACTIVE_MILESTONE >= 2
+    lcd_init(bsp_get_i2c_port(), LCD_I2C_ADDR);
 #endif
 
     g_telem_mutex = xSemaphoreCreateMutex();

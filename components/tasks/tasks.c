@@ -31,6 +31,7 @@ static volatile int s_display_page = 0;
 static void imu_task(void *pvParameters)
 {
     // Sensors are initialised in app_main before tasks start
+    int log_count = 0;
     while (1) {
         float pitch = 0.0f, roll = 0.0f, heading = 0.0f;
         mpu6050_read(&pitch, &roll);
@@ -41,6 +42,11 @@ static void imu_task(void *pvParameters)
             g_local.roll    = roll;
             g_local.heading = heading;
             xSemaphoreGive(g_telem_mutex);
+        }
+
+        if (++log_count % 20 == 0) {
+            ESP_LOGI(TAG, "IMU pitch=%+6.1f roll=%+6.1f heading=%5.1f",
+                     pitch, roll, heading);
         }
 
         vTaskDelay(pdMS_TO_TICKS(50));

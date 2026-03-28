@@ -1,6 +1,6 @@
 #pragma once
 
-#include "driver/i2c_master.h"
+#include "driver/i2c.h"
 #include "driver/uart.h"
 #include "board_config.h"
 
@@ -11,10 +11,14 @@
 void bsp_init(void);
 
 /**
- * bsp_get_i2c_bus - returns the shared I2C master bus handle.
- * All I2C component drivers call this to obtain the bus handle.
+ * bsp_get_i2c_port - returns I2C_NUM_0 (OLED display bus).
  */
-i2c_master_bus_handle_t bsp_get_i2c_bus(void);
+i2c_port_t bsp_get_i2c_port(void);
+
+/**
+ * bsp_get_i2c_port2 - returns I2C_NUM_1 (IMU sensor bus).
+ */
+i2c_port_t bsp_get_i2c_port2(void);
 
 /**
  * bsp_get_gps_uart - returns the UART port number used for GPS.

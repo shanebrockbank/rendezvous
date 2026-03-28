@@ -1,9 +1,13 @@
 #pragma once
 
-// I2C Bus
+// I2C Bus 0 — OLED display (SSD1306)
 #define HAL_I2C_SDA_PIN       21
 #define HAL_I2C_SCL_PIN       22
 #define HAL_I2C_FREQ_HZ       400000
+
+// I2C Bus 1 — IMU sensors (MPU6050 + HMC5883L)
+#define HAL_I2C2_SDA_PIN      18
+#define HAL_I2C2_SCL_PIN      19
 
 // I2C Device Addresses
 #define MPU6050_I2C_ADDR      0x68
@@ -31,4 +35,4 @@
 // 3 = + IMU (MPU6050 + HMC5883L)
 // 4 = + GPS NMEA
 // 5 = + rendezvous docking logic (all tasks)
-#define ACTIVE_MILESTONE      2
+#define ACTIVE_MILESTONE      3

@@ -1,14 +1,15 @@
 #pragma once
 
-#include "driver/i2c_master.h"
+#include "driver/i2c.h"
+#include "esp_err.h"
 
 /**
- * mpu6050_init - wake the MPU6050 from sleep and verify communication.
+ * mpu6050_init - wake the MPU6050 from sleep.
  *
- * @param bus_handle  Shared I2C master bus handle from hal_get_i2c_bus()
+ * @param port  I2C port number (e.g. I2C_NUM_1)
  * @return ESP_OK on success
  */
-esp_err_t mpu6050_init(i2c_master_bus_handle_t bus_handle);
+esp_err_t mpu6050_init(i2c_port_t port);
 
 /**
  * mpu6050_read - read accelerometer and compute pitch and roll.

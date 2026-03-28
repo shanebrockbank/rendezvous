@@ -22,15 +22,8 @@ static const char *TAG = "lcd_i2c";
 #define CTRL_CMD            0x00
 #define CTRL_DATA           0x40
 
-static i2c_master_bus_handle_t s_bus = NULL;
-static i2c_master_dev_handle_t s_dev = NULL;
-
-static void i2c_recover(void)
-{
-    if (s_bus) {
-        i2c_master_bus_reset(s_bus);
-    }
-}
+static i2c_port_t s_port;
+static uint8_t    s_addr;
 
 // ---------------------------------------------------------------------------
 // Standard 5x8 ASCII font — 5 column bytes per character, 0x20..0x7E
@@ -135,18 +128,30 @@ static const uint8_t k_font[][5] = {
 };
 
 // ---------------------------------------------------------------------------
-// Low-level helpers
+// Low-level helper — write a byte buffer to the SSD1306 over I2C
 // ---------------------------------------------------------------------------
-static esp_err_t ssd1306_cmd(uint8_t cmd)
+static esp_err_t ssd1306_write(const uint8_t *buf, size_t len)
 {
-    uint8_t buf[2] = {CTRL_CMD, cmd};
-    return i2c_master_transmit(s_dev, buf, 2, pdMS_TO_TICKS(50));
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (s_addr << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write(cmd, (uint8_t *)buf, len, true);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(s_port, cmd, pdMS_TO_TICKS(200));
+    i2c_cmd_link_delete(cmd);
+    return ret;
 }
 
-static esp_err_t ssd1306_cmd2(uint8_t cmd, uint8_t arg)
+static esp_err_t ssd1306_cmd(uint8_t cmd_byte)
 {
-    uint8_t buf[3] = {CTRL_CMD, cmd, arg};
-    return i2c_master_transmit(s_dev, buf, 3, pdMS_TO_TICKS(50));
+    uint8_t buf[2] = {CTRL_CMD, cmd_byte};
+    return ssd1306_write(buf, 2);
+}
+
+static esp_err_t ssd1306_cmd2(uint8_t cmd_byte, uint8_t arg)
+{
+    uint8_t buf[3] = {CTRL_CMD, cmd_byte, arg};
+    return ssd1306_write(buf, 3);
 }
 
 static void set_cursor_raw(uint8_t page, uint8_t col)
@@ -157,23 +162,16 @@ static void set_cursor_raw(uint8_t page, uint8_t col)
         0x00 | (col & 0x0F),
         0x10 | ((col >> 4) & 0x0F),
     };
-    if (i2c_master_transmit(s_dev, buf, 4, pdMS_TO_TICKS(50)) != ESP_OK) {
-        i2c_recover();
-    }
+    ssd1306_write(buf, 4);
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
-void lcd_init(i2c_master_bus_handle_t bus_handle, uint8_t i2c_addr)
+void lcd_init(i2c_port_t port, uint8_t i2c_addr)
 {
-    s_bus = bus_handle;
-    i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address  = i2c_addr,
-        .scl_speed_hz    = 400000,
-    };
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &s_dev));
+    s_port = port;
+    s_addr = i2c_addr;
 
     vTaskDelay(pdMS_TO_TICKS(10));
 
@@ -208,7 +206,7 @@ void lcd_clear(void)
 
     for (uint8_t page = 0; page < 8; page++) {
         set_cursor_raw(page, 0);
-        i2c_master_transmit(s_dev, buf, 129, pdMS_TO_TICKS(100));
+        ssd1306_write(buf, 129);
     }
 }
 
@@ -234,8 +232,6 @@ void lcd_write_string(const char *str)
         n++;
     }
     if (n > 0) {
-        if (i2c_master_transmit(s_dev, buf, 1 + n * 6, pdMS_TO_TICKS(200)) != ESP_OK) {
-            i2c_recover();
-        }
+        ssd1306_write(buf, 1 + n * 6);
     }
 }

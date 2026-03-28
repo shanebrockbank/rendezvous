@@ -1,14 +1,14 @@
 #pragma once
 
-#include "driver/i2c_master.h"
+#include "driver/i2c.h"
 
 /**
- * lcd_init - initialise HD44780 LCD via PCF8574 I2C backpack.
+ * lcd_init - initialise SSD1306 OLED via legacy I2C driver.
  *
- * @param bus_handle  Shared I2C master bus handle from hal_get_i2c_bus()
- * @param i2c_addr    PCF8574 address (0x27 or 0x3F)
+ * @param port      I2C port number (e.g. I2C_NUM_0)
+ * @param i2c_addr  SSD1306 address (typically 0x3C)
  */
-void lcd_init(i2c_master_bus_handle_t bus_handle, uint8_t i2c_addr);
+void lcd_init(i2c_port_t port, uint8_t i2c_addr);
 
 /**
  * lcd_clear - clear display and return cursor to home.
@@ -27,4 +27,3 @@ void lcd_set_cursor(uint8_t row, uint8_t col);
  * lcd_write_string - write a null-terminated string at the current cursor.
  */
 void lcd_write_string(const char *str);
-

@@ -10,36 +10,42 @@ static const char *TAG = "hmc5883l";
 
 #define RAD_TO_DEG  (180.0f / M_PI)
 
-static i2c_master_dev_handle_t s_dev = NULL;
+static i2c_port_t s_port;
 
 static esp_err_t i2c_write_reg(uint8_t reg, uint8_t val)
 {
-    uint8_t buf[2] = {reg, val};
-    return i2c_master_transmit(s_dev, buf, 2, pdMS_TO_TICKS(50));
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (HMC5883L_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, reg, true);
+    i2c_master_write_byte(cmd, val, true);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(s_port, cmd, pdMS_TO_TICKS(50));
+    i2c_cmd_link_delete(cmd);
+    return ret;
 }
 
 static esp_err_t i2c_read_regs(uint8_t reg, uint8_t *data, size_t len)
 {
-    esp_err_t ret = i2c_master_transmit(s_dev, &reg, 1, pdMS_TO_TICKS(50));
-    if (ret != ESP_OK) return ret;
-    return i2c_master_receive(s_dev, data, len, pdMS_TO_TICKS(50));
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (HMC5883L_I2C_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, reg, true);
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (HMC5883L_I2C_ADDR << 1) | I2C_MASTER_READ, true);
+    i2c_master_read(cmd, data, len, I2C_MASTER_LAST_NACK);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(s_port, cmd, pdMS_TO_TICKS(50));
+    i2c_cmd_link_delete(cmd);
+    return ret;
 }
 
-esp_err_t hmc5883l_init(i2c_master_bus_handle_t bus_handle)
+esp_err_t hmc5883l_init(i2c_port_t port)
 {
-    i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address  = HMC5883L_I2C_ADDR,
-        .scl_speed_hz    = HAL_I2C_FREQ_HZ,
-    };
-    esp_err_t ret = i2c_master_bus_add_device(bus_handle, &dev_cfg, &s_dev);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to add I2C device: %s", esp_err_to_name(ret));
-        return ret;
-    }
+    s_port = port;
 
     // Config A: 8 samples average, 15 Hz output rate
-    ret = i2c_write_reg(HMC5883L_REG_CONFIG_A, 0x70);
+    esp_err_t ret = i2c_write_reg(HMC5883L_REG_CONFIG_A, 0x70);
     if (ret != ESP_OK) goto fail;
 
     // Config B: gain = 1090 LSB/Gauss (default)

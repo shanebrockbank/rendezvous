@@ -2,14 +2,12 @@
 #include "board_config.h"
 
 #include "nvs_flash.h"
-#include "driver/i2c_master.h"
+#include "driver/i2c.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 
 static const char *TAG = "bsp";
-
-static i2c_master_bus_handle_t s_i2c_bus = NULL;
 
 void bsp_init(void)
 {
@@ -21,22 +19,31 @@ void bsp_init(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // I2C master bus (shared by MPU6050, HMC5883L, LCD)
-    i2c_master_bus_config_t bus_cfg = {
-        .i2c_port          = I2C_NUM_0,
-        .sda_io_num        = HAL_I2C_SDA_PIN,
-        .scl_io_num        = HAL_I2C_SCL_PIN,
-        .clk_source        = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
+    // I2C bus 0 — OLED display (SSD1306)
+    i2c_config_t bus0_cfg = {
+        .mode             = I2C_MODE_MASTER,
+        .sda_io_num       = HAL_I2C_SDA_PIN,
+        .scl_io_num       = HAL_I2C_SCL_PIN,
+        .sda_pullup_en    = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en    = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = HAL_I2C_FREQ_HZ,
     };
-    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &s_i2c_bus));
-    ESP_LOGI(TAG, "I2C bus initialised (SDA=%d SCL=%d)", HAL_I2C_SDA_PIN, HAL_I2C_SCL_PIN);
+    ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_0, &bus0_cfg));
+    ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0));
+    ESP_LOGI(TAG, "I2C bus 0 initialised (SDA=%d SCL=%d)", HAL_I2C_SDA_PIN, HAL_I2C_SCL_PIN);
 
-    // i2c.common fires "GPIO not usable" on every transaction (ESP-IDF v5 ownership check) — suppress
-    // i2c.master kept at WARN so real errors (timeout, NACK) remain visible
-    esp_log_level_set("i2c.common", ESP_LOG_NONE);
-    esp_log_level_set("i2c.master", ESP_LOG_WARN);
+    // I2C bus 1 — IMU sensors (MPU6050 + HMC5883L)
+    i2c_config_t bus1_cfg = {
+        .mode             = I2C_MODE_MASTER,
+        .sda_io_num       = HAL_I2C2_SDA_PIN,
+        .scl_io_num       = HAL_I2C2_SCL_PIN,
+        .sda_pullup_en    = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en    = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = HAL_I2C_FREQ_HZ,
+    };
+    ESP_ERROR_CHECK(i2c_param_config(I2C_NUM_1, &bus1_cfg));
+    ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM_1, I2C_MODE_MASTER, 0, 0, 0));
+    ESP_LOGI(TAG, "I2C bus 1 initialised (SDA=%d SCL=%d)", HAL_I2C2_SDA_PIN, HAL_I2C2_SCL_PIN);
 
     // GPS UART
     uart_config_t uart_cfg = {
@@ -80,9 +87,14 @@ void bsp_init(void)
     ESP_LOGI(TAG, "BSP init complete (node_id=%d)", NODE_ID);
 }
 
-i2c_master_bus_handle_t bsp_get_i2c_bus(void)
+i2c_port_t bsp_get_i2c_port(void)
 {
-    return s_i2c_bus;
+    return I2C_NUM_0;
+}
+
+i2c_port_t bsp_get_i2c_port2(void)
+{
+    return I2C_NUM_1;
 }
 
 uart_port_t bsp_get_gps_uart(void)
