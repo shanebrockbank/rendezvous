@@ -51,6 +51,11 @@ static bool  s_rssi_seeded   = false;   // true after first non-(-100) RSSI
 static float s_gps_ema       = 0.0f;
 static volatile float s_output = -1.0f; // exposed via distance_get_estimate_m()
 
+// Last computed component values — exposed via distance_get_components()
+static float s_rssi_med_last  = -100.0f;
+static float s_rssi_dist_last =    0.0f;
+static float s_gps_dist_last  =    0.0f;
+
 // ---------------------------------------------------------------------------
 // Haversine great-circle distance (static — keep dependency-free)
 // ---------------------------------------------------------------------------
@@ -129,6 +134,11 @@ void distance_estimator_update(double gps_lat_l, double gps_lon_l,
         gps_dist = s_gps_ema;
     }
 
+    // --- Snapshot components for distance_get_components() ---
+    s_rssi_med_last  = rssi_med;
+    s_rssi_dist_last = rssi_dist;
+    if (gps_valid) s_gps_dist_last = gps_dist;   // hold last good value on fix loss
+
     // --- Linear fusion blend ---
     // w_gps: 1.0 = GPS only, 0.0 = RSSI only
     float w_gps = 0.0f;
@@ -165,4 +175,11 @@ void distance_estimator_update(double gps_lat_l, double gps_lon_l,
 float distance_get_estimate_m(void)
 {
     return s_output;
+}
+
+void distance_get_components(float *gps_m, float *rssi_m, float *rssi_dbm)
+{
+    if (gps_m)    *gps_m    = s_gps_dist_last;
+    if (rssi_m)   *rssi_m   = s_rssi_dist_last;
+    if (rssi_dbm) *rssi_dbm = s_rssi_med_last;
 }

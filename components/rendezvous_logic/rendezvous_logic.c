@@ -2,11 +2,10 @@
 #include "math.h"
 
 // Thresholds
-#define PROX_THRESHOLD_M    5.0f    // must be within 5 m
+#define PROX_THRESHOLD_M    2.0f    // must be within 2m
 #define ALIGN_THRESHOLD_M   20.0f   // "aligning" zone (approaching)
-#define HDG_THRESHOLD_DEG   20.0f   // max heading difference for docking
-#define PITCH_THRESHOLD_DEG 15.0f   // max pitch difference
-#define ROLL_THRESHOLD_DEG  15.0f   // max roll difference
+#define PITCH_THRESHOLD_DEG 15.0f   // max pitch difference for docking
+#define ROLL_THRESHOLD_DEG  15.0f   // max roll difference for docking
 
 #define DEG_TO_RAD  (M_PI / 180.0)
 #define EARTH_R_M   6371000.0       // mean Earth radius in metres
@@ -49,13 +48,11 @@ rdv_state_t rendezvous_evaluate(const telemetry_packet_t *local,
         return RDV_ALIGNING;
     }
 
-    // Within docking range — check orientation
-    float hdg_d   = angle_delta(local->heading, remote->heading);
-    float pitch_d = angle_delta(local->pitch,   remote->pitch);
-    float roll_d  = angle_delta(local->roll,    remote->roll);
+    // Within docking range — check pitch and roll alignment only
+    float pitch_d = angle_delta(local->pitch, remote->pitch);
+    float roll_d  = angle_delta(local->roll,  remote->roll);
 
-    if (hdg_d   <= HDG_THRESHOLD_DEG &&
-        pitch_d <= PITCH_THRESHOLD_DEG &&
+    if (pitch_d <= PITCH_THRESHOLD_DEG &&
         roll_d  <= ROLL_THRESHOLD_DEG) {
         return RDV_DOCKED;
     }

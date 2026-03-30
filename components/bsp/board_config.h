@@ -3,7 +3,7 @@
 // I2C Bus 0 — OLED display (SSD1306)
 #define HAL_I2C_SDA_PIN       21
 #define HAL_I2C_SCL_PIN       22
-#define HAL_I2C_FREQ_HZ       400000
+#define HAL_I2C_FREQ_HZ       100000
 
 // I2C Bus 1 — IMU sensors (MPU6050 + HMC5883L)
 #define HAL_I2C2_SDA_PIN      18
@@ -16,6 +16,14 @@
 // Set to 1 if the ICM-20948 is mounted component-side down (upside down).
 // Negates the Z axis on accel and mag so pitch/roll read 0° when flat.
 #define ICM_MOUNT_INVERTED    1
+
+// IMU static offset calibration — subtracted from pitch/roll after EMA smoothing.
+// To calibrate: flash with both at 0.0, lay device flat on a level surface,
+// navigate to OLED page 5, let readings settle ~5 s, then set these to the
+// displayed pitch/roll values and reflash. Page 5 should then read P+0.0 R+0.0 flat.
+#define ICM_PITCH_OFFSET_DEG  -3.4f
+#define ICM_ROLL_OFFSET_DEG   4.3f
+
 #define LCD_I2C_ADDR          0x3C
 
 // GPS UART
@@ -31,13 +39,14 @@
 #define HAL_BUTTON_PAGE_PIN   13     // External button — cycles LCD display pages (active low)
 
 // Node identity — change per flash (0 = chaser, 1 = target)
-#define NODE_ID               0
+#define NODE_ID               1
 
 // RSSI reference level (dBm) measured at 1 m between the two devices in open air.
 // Back-calculated from field data: −38 dBm at GPS-measured ~3 m → ref ≈ −29 dBm.
-// To refine: hold both devices exactly 1 m apart, read dist_est log until rssi_d ≈ 1.0 m,
-// then set this to the median rssi= value you observe.
-#define RSSI_REF_1M           -29
+// To calibrate: hold both devices exactly 1 m apart outdoors, switch to OLED page 7.
+// Wait ~5 s for the RS: dBm reading to stabilise, set RSSI_REF_1M to that value and
+// reflash. Verify rssi_d on page 7 reads ≈ 1.0 m when 1 m apart.
+#define RSSI_REF_1M           -55
 
 // Active milestone — controls which tasks run at startup
 // 1 = ESP-NOW comms + LED/button
@@ -45,4 +54,4 @@
 // 3 = + IMU (ICM-20948: accel/gyro + AK09916 mag, tilt-compensated heading, OLED pages 5+6)
 // 4 = + GPS NMEA + distance estimator (GPS haversine + RSSI fusion)
 // 5 = + rendezvous docking logic (all tasks)
-#define ACTIVE_MILESTONE      4
+#define ACTIVE_MILESTONE      5

@@ -26,3 +26,18 @@ void distance_estimator_update(double gps_lat_l, double gps_lon_l,
  * Returns −1.0 if no estimate is available yet (no link and no GPS).
  */
 float distance_get_estimate_m(void);
+
+/**
+ * distance_get_components - individual distance components from the last update.
+ *
+ * For RSSI calibration without a terminal: hold devices 1 m apart, watch
+ * OLED page 7 until rssi_m stabilises, note rssi_dbm, set RSSI_REF_1M to
+ * that value in board_config.h.
+ *
+ * @param gps_m      GPS haversine EMA distance (metres, last valid value)
+ * @param rssi_m     RSSI log-distance estimate (metres)
+ * @param rssi_dbm   Median RSSI used in last computation (dBm)
+ *
+ * Any pointer may be NULL to skip that output.
+ */
+void distance_get_components(float *gps_m, float *rssi_m, float *rssi_dbm);

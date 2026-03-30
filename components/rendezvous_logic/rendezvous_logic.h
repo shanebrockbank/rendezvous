@@ -20,10 +20,12 @@ float haversine_distance_m(double lat1, double lon1, double lat2, double lon2);
  * rendezvous_evaluate - evaluate current docking state.
  *
  * Rules:
- *   dist >= PROX_THRESHOLD_M                    → RDV_STANDBY
- *   dist <  PROX_THRESHOLD_M, orientation OK    → RDV_DOCKED
- *   dist <  PROX_THRESHOLD_M, orientation off   → RDV_FAILED
- *   dist <  ALIGN_THRESHOLD_M                   → RDV_ALIGNING (approaching)
+ *   dist >= ALIGN_THRESHOLD_M                               → RDV_STANDBY
+ *   PROX_THRESHOLD_M <= dist < ALIGN_THRESHOLD_M            → RDV_ALIGNING
+ *   dist < PROX_THRESHOLD_M, pitch+roll aligned             → RDV_DOCKED
+ *   dist < PROX_THRESHOLD_M, pitch or roll out of threshold → RDV_FAILED
+ *
+ * Note: heading is intentionally excluded from the docking check.
  *
  * @param local   Pointer to local telemetry
  * @param remote  Pointer to remote telemetry

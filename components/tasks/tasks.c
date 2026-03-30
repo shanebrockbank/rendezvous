@@ -22,7 +22,9 @@
 
 static const char *TAG = "tasks";
 
-#if ACTIVE_MILESTONE >= 3
+#if ACTIVE_MILESTONE >= 4
+#define NUM_DISPLAY_PAGES  8   // page 7: RSSI calibration
+#elif ACTIVE_MILESTONE >= 3
 #define NUM_DISPLAY_PAGES  7   // pages 5+6: local/remote IMU
 #else
 #define NUM_DISPLAY_PAGES  5
@@ -89,6 +91,34 @@ static void gps_copy_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Rendezvous task (Core 0) — evaluates and logs state changes every 500 ms
+// ---------------------------------------------------------------------------
+#if ACTIVE_MILESTONE >= 5
+static void rendezvous_task(void *pvParameters)
+{
+    rdv_state_t prev_state = RDV_STANDBY;
+    while (1) {
+        telemetry_packet_t local, remote;
+        if (xSemaphoreTake(g_telem_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            local  = g_local;
+            remote = g_remote;
+            xSemaphoreGive(g_telem_mutex);
+        }
+        float dist = distance_get_estimate_m();
+        rdv_state_t state = rendezvous_evaluate(&local, &remote);
+        if (state != prev_state) {
+            ESP_LOGI(TAG, "RDV STATE: %s  dist=%.1fm  P_delta=%.1f R_delta=%.1f",
+                     rdv_state_name(state), dist,
+                     fabsf(local.pitch - remote.pitch),
+                     fabsf(local.roll  - remote.roll));
+            prev_state = state;
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // Display task (Core 1) — updates LCD every 250 ms, button cycles pages
@@ -227,6 +257,20 @@ static void display_task(void *pvParameters)
             }
             break;
 
+        case 7: { // RSSI calibration — median RSSI dBm + component distances
+            float gps_d, rssi_d, rssi_dbm;
+            distance_get_components(&gps_d, &rssi_d, &rssi_dbm);
+            // Row 0 (16 chars): "RS: -38   1.2m "
+            snprintf(row0, sizeof(row0), "RS:%4d %6.1fm ", (int)rssi_dbm, rssi_d);
+            // Row 1 (16 chars): "GPS:    1.1m    " or "GPS: NO FIX     "
+            if (gps_l_valid) {
+                snprintf(row1, sizeof(row1), "GPS: %6.1fm    ", gps_d);
+            } else {
+                snprintf(row1, sizeof(row1), "GPS: NO FIX     ");
+            }
+            break;
+        }
+
         default:
             snprintf(row0, sizeof(row0), "                ");
             snprintf(row1, sizeof(row1), "                ");
@@ -262,6 +306,10 @@ void tasks_start(void)
 #if ACTIVE_MILESTONE >= 4
     xTaskCreatePinnedToCore(gps_nmea_task,  "gps_nmea",  4096, NULL, 4, NULL, 1);
     xTaskCreatePinnedToCore(gps_copy_task,  "gps_copy",  2048, NULL, 3, NULL, 1);
+#endif
+
+#if ACTIVE_MILESTONE >= 5
+    xTaskCreatePinnedToCore(rendezvous_task, "rdv",       3072, NULL, 3, NULL, 0);
 #endif
 
     ESP_LOGI(TAG, "Tasks started (milestone=%d).", ACTIVE_MILESTONE);

@@ -146,9 +146,9 @@ esp_err_t icm20948_init(i2c_port_t port)
 
     if ((ret = set_bank(0)) != ESP_OK) goto fail;
 
-    // Soft reset
+    // Soft reset — datasheet specifies 100 ms startup time after reset
     if ((ret = icm_write(B0_PWR_MGMT_1, 0x80)) != ESP_OK) goto fail;
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     // Wake + auto clock
     if ((ret = icm_write(B0_PWR_MGMT_1, 0x01)) != ESP_OK) goto fail;
@@ -313,6 +313,10 @@ esp_err_t icm20948_read(float *pitch_deg, float *roll_deg, float *heading_deg)
     float smooth_hdg = atan2f(s_sin_hdg_ema, s_cos_hdg_ema) * RAD_TO_DEG;
     if (smooth_hdg < 0.0f) smooth_hdg += 360.0f;
     *heading_deg = smooth_hdg;
+
+    // Static mounting offset correction — applied after EMA, does not feed back
+    *pitch_deg -= ICM_PITCH_OFFSET_DEG;
+    *roll_deg  -= ICM_ROLL_OFFSET_DEG;
 
     if (do_log) {
         ESP_LOGD(TAG, "SMOOTH P=%+6.1f  R=%+6.1f  HDG=%5.1f  (alpha=%.1f)",
