@@ -18,6 +18,8 @@ static const char *TAG = "espnow";
 volatile uint32_t g_remote_rx_ms = 0;
 // Local uptime (ms) of last remote button press — latches so display can't miss a quick press
 volatile uint32_t g_remote_btn_ms = 0;
+// RSSI (dBm) of the most recently received packet — used by distance_estimator
+volatile int8_t g_remote_rssi = -100;
 
 // Broadcast MAC — all ESP-NOW peers receive
 static const uint8_t k_broadcast_mac[ESP_NOW_ETH_ALEN] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
@@ -51,7 +53,8 @@ static void recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, i
     }
 
     // Record OUR local time of receipt — used for link staleness (not remote clock)
-    g_remote_rx_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    g_remote_rx_ms  = (uint32_t)(esp_timer_get_time() / 1000ULL);
+    g_remote_rssi   = (int8_t)recv_info->rx_ctrl->rssi;
 
     // Drive RX LED directly — high if remote button pressed, brief pulse otherwise
     gpio_set_level(HAL_LED_RX_PIN, pkt->button_state ? 1 : 0);

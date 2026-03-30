@@ -6,8 +6,7 @@ idf_component_register(
         espnow_comms
         gps_nmea
         lcd_i2c
-        mpu6050
-        hmc5883l
+        icm20948
         tasks
         freertos
 )

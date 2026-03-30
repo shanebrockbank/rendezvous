@@ -44,3 +44,6 @@ extern volatile uint32_t g_remote_rx_ms;
 
 // Local uptime (ms) of the last remote button press — latched so display can't miss a quick tap.
 extern volatile uint32_t g_remote_btn_ms;
+
+// RSSI (dBm) of the most recently received packet. Initialised to -100 (no link).
+extern volatile int8_t g_remote_rssi;

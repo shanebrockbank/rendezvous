@@ -15,27 +15,30 @@
 #include "board_config.h"
 #include "espnow_comms.h"
 #include "lcd_i2c.h"
-#include "mpu6050.h"
-#include "hmc5883l.h"
+#include "icm20948.h"
 #include "gps_nmea.h"
 #include "rendezvous_logic.h"
+#include "distance_estimator.h"
 
 static const char *TAG = "tasks";
 
+#if ACTIVE_MILESTONE >= 3
+#define NUM_DISPLAY_PAGES  7   // pages 5+6: local/remote IMU
+#else
 #define NUM_DISPLAY_PAGES  5
+#endif
 static volatile int s_display_page = 0;
 
 // ---------------------------------------------------------------------------
-// IMU task (Core 0) — reads MPU6050 + HMC5883L every 50 ms
+// IMU task (Core 0) — reads ICM-20948 every 50 ms
 // ---------------------------------------------------------------------------
 static void imu_task(void *pvParameters)
 {
-    // Sensors are initialised in app_main before tasks start
+    // Sensor is initialised in app_main before tasks start
     int log_count = 0;
     while (1) {
         float pitch = 0.0f, roll = 0.0f, heading = 0.0f;
-        mpu6050_read(&pitch, &roll);
-        hmc5883l_read(&heading);
+        icm20948_read(&pitch, &roll, &heading);
 
         if (xSemaphoreTake(g_telem_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             g_local.pitch   = pitch;
@@ -68,13 +71,21 @@ static void gps_copy_task(void *pvParameters)
         bool   valid;
         gps_get_fix(&lat, &lon, &valid);
 
+        double r_lat = 0.0, r_lon = 0.0;
         if (xSemaphoreTake(g_telem_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             if (valid) {
                 g_local.lat = lat;
                 g_local.lon = lon;
             }
+            r_lat = g_remote.lat;
+            r_lon = g_remote.lon;
             xSemaphoreGive(g_telem_mutex);
         }
+
+        bool r_valid = (r_lat != 0.0 || r_lon != 0.0);
+        distance_estimator_update(lat, lon, r_lat, r_lon,
+                                  valid && r_valid, g_remote_rssi);
+
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
@@ -188,17 +199,33 @@ static void display_task(void *pvParameters)
             }
             break;
 
-        case 4: { // Docking status
+        case 4: { // Docking status — fused GPS+RSSI distance
             rdv_state_t state = rendezvous_evaluate(&local, &remote);
-            if (gps_l_valid && gps_r_valid) {
-                float dist = haversine_distance_m(lat_l, lon_l, lat_r, lon_r);
+            float dist = distance_get_estimate_m();
+            if (dist >= 0.0f) {
                 snprintf(row0, sizeof(row0), "DIST: %5.1fm    ", dist);
             } else {
-                snprintf(row0, sizeof(row0), "DIST: NO GPS    ");
+                snprintf(row0, sizeof(row0), "DIST: NO DATA   ");
             }
             snprintf(row1, sizeof(row1), "%-16s", rdv_state_name(state));
             break;
         }
+
+        case 5: // Local IMU — pitch, roll, tilt-compensated heading
+            // Row 0: "P+123.4 R-056.7 " (P=Pitch, R=Roll, %+6.1f always 6 chars)
+            snprintf(row0, sizeof(row0), "P%+6.1f R%+6.1f ", local.pitch, local.roll);
+            snprintf(row1, sizeof(row1), "HDG %5.1f       ", local.heading);
+            break;
+
+        case 6: // Remote IMU
+            if (!link_ok) {
+                snprintf(row0, sizeof(row0), "R ---NO LINK--- ");
+                snprintf(row1, sizeof(row1), "                ");
+            } else {
+                snprintf(row0, sizeof(row0), "P%+6.1f R%+6.1f ", remote.pitch, remote.roll);
+                snprintf(row1, sizeof(row1), "HDG %5.1f       ", remote.heading);
+            }
+            break;
 
         default:
             snprintf(row0, sizeof(row0), "                ");

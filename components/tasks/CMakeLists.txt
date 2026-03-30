@@ -5,10 +5,10 @@ idf_component_register(
         bsp
         espnow_comms
         lcd_i2c
-        mpu6050
-        hmc5883l
+        icm20948
         gps_nmea
         rendezvous_logic
+        distance_estimator
         driver
         esp_timer
         freertos

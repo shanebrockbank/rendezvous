@@ -7,8 +7,7 @@
 #include "espnow_comms.h"
 #include "gps_nmea.h"
 #include "lcd_i2c.h"
-#include "mpu6050.h"
-#include "hmc5883l.h"
+#include "icm20948.h"
 #include "tasks.h"
 
 static const char *TAG = "main";
@@ -26,8 +25,7 @@ void app_main(void)
     bsp_init();
 
 #if ACTIVE_MILESTONE >= 3
-    mpu6050_init(bsp_get_i2c_port2());
-    hmc5883l_init(bsp_get_i2c_port2());
+    icm20948_init(bsp_get_i2c_port2());
 #endif
 #if ACTIVE_MILESTONE >= 2
     lcd_init(bsp_get_i2c_port(), LCD_I2C_ADDR);
